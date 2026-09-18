@@ -1,6 +1,8 @@
-# Quilblyx
+# Quiblyx
 
 Local, mock-backed multi-tenant LLM gateway and administration console. Built with Next.js/TypeScript, FastAPI, PostgreSQL, Redis and Celery. **Development implementation, not production-qualified.** All provider output and pricing are deterministic mocks. No paid provider calls are made.
+
+Its differentiating workflow is **AI Spend Contracts**: reserve a cost/token/step envelope for an entire AI task, execute parallel model steps with a signed contract token, then receive an auditable settlement receipt. See [Spend Contracts](docs/SPEND_CONTRACTS.md).
 
 ## Start locally
 

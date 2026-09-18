@@ -1,4 +1,4 @@
-name: llm-platform
+name: quiblyx
 x-backend: &backend
   build: .
   env_file: .env

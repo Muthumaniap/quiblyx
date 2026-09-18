@@ -1,10 +1,21 @@
 # Implementation progress
 
-## Branding update — 2026-09-17
-- Owner supplied the name Quilblyx and PNG logo references.
-- Added an SVG interface adaptation of the blue Q, sidebar wordmark, favicon, page metadata and blue/navy theme. Original references preserved.
-- Web container now includes public brand assets. See `docs/BRANDING.md`.
-- Quilblyx web production build/TypeScript and backend lint/import checks passed. Visual browser inspection remains unverified.
+## Spend Contracts v1 — 2026-09-18
+- [x] Workflow envelope creation reserves money, tokens and step capacity across applicable tenant scopes.
+- [x] Signed expiring tokens bound to tenant, application, virtual key, contract version and allocate-only scope.
+- [x] Atomic parallel child allocations; no double reservation against tenant budgets.
+- [x] Actual settlement, unused escrow release, immutable contract ledger and detailed receipt.
+- [x] Token rotation, revocation, close, model allowlist, named steps and conservative uncertainty handling.
+- [x] API-backed console creation/lifecycle workflow plus Python and TypeScript server examples.
+- [x] Five contract integration tests; complete suite passes 28 tests on a database migrated from zero.
+- [ ] Automated expiry sweep, contract expansion approvals, tool-capable adapters and real-provider qualification.
+
+## Branding update — 2026-09-18
+- Owner confirmed the exact name **Quiblyx** (`q-u-i-b-l-y-x`) and supplied PNG logo references.
+- Corrected both supplied raster wordmarks in place and added named light/dark assets under `logo/` and `apps/web/public/brand/`.
+- Renamed the SVG interface mark to `quiblyx-mark.svg` and updated the sidebar wordmark, favicon, page metadata, API titles, package metadata, Compose project, notification domain and contract-token namespace.
+- Repository search finds no remaining text using the former misspelling. The live web page and both OpenAPI documents report Quiblyx; all public brand assets return HTTP 200.
+- Quiblyx web production build/TypeScript, backend lint, and the full PostgreSQL/Redis suite pass (28 tests). Visual browser interaction testing remains outstanding.
 
 Specification read in full on 2026-09-17. Existing repository contained only the specification and a one-line README. No existing application was replaced.
 

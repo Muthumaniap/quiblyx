@@ -1,5 +1,5 @@
 from typing import Literal
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
@@ -7,9 +7,11 @@ from sqlalchemy import select, text
 from packages.domain.config import settings
 from packages.domain.db import transaction
 from packages.domain.models import (Tenant, Membership, Group, Connection, Application, Key, Budget,
-                                    Request, Audit, Event, Role, Project, ServiceAccount, Reservation, Ledger)
-from packages.domain.security import identity, authorize, ancestry, encrypt, issue_secret, PERMISSIONS, TEMPLATES
-from packages.domain.accounting import month, settle
+                                    Request, Audit, Event, Role, Project, ServiceAccount, Reservation, Ledger,
+                                    SpendContract, ContractReservation, ContractAllocation, ContractLedger)
+from packages.domain.security import (identity, authorize, ancestry, encrypt, issue_secret,
+                                      issue_contract_token, PERMISSIONS, TEMPLATES)
+from packages.domain.accounting import month, settle, create_spend_contract, close_spend_contract
 from packages.observability.http import configure
 
 app = FastAPI(title=f"{settings().product_name} Control API", version="0.1.0")
@@ -81,6 +83,20 @@ class MoveInput(Input):
 class ServiceAccountInput(Input):
     name: str = Field(min_length=1, max_length=120)
     application_id: str
+
+
+class ContractInput(Input):
+    name: str = Field(min_length=1, max_length=120)
+    purpose: str = Field(min_length=1, max_length=500)
+    application_id: str
+    key_id: str
+    max_cost_microusd: int = Field(gt=0, le=10**12)
+    max_tokens: int = Field(gt=0, le=10**9)
+    max_steps: int = Field(gt=0, le=10_000)
+    allowed_models: list[Literal["org-balanced", "org-economy", "mock-text-v1"]] = Field(min_length=1)
+    allowed_tools: list[str] = Field(default_factory=list, max_length=100)
+    data_region: str = Field(default="local", min_length=1, max_length=40)
+    duration_seconds: int = Field(default=3600, ge=60, le=86_400)
 
 
 def record(row):
@@ -267,7 +283,86 @@ def pause(tenant: str, application_id: str, body: PauseInput, subject=Depends(id
 CATALOGUE = {"groups": Group, "applications": Application, "virtual-keys": Key,
              "provider-connections": Connection, "budgets": Budget, "requests": Request,
              "audit-events": Audit, "notifications": Event, "memberships": Membership, "roles": Role,
-             "projects": Project, "service-accounts": ServiceAccount}
+             "projects": Project, "service-accounts": ServiceAccount, "spend-contracts": SpendContract}
+
+
+@app.post("/api/v1/organisations/{tenant}/spend-contracts", status_code=201)
+def create_contract(tenant: str, body: ContractInput, subject=Depends(identity)):
+    with transaction(tenant) as s:
+        application = find(s, Application, tenant, body.application_id)
+        authorize(tenant, subject, True, application.group_id)
+    expires = datetime.now(timezone.utc) + timedelta(seconds=body.duration_seconds)
+    contract_id = create_spend_contract(tenant, body.application_id, body.key_id, body.name, body.purpose,
+        body.max_cost_microusd, body.max_tokens, body.max_steps, sorted(set(body.allowed_models)),
+        sorted(set(body.allowed_tools)), body.data_region, expires)
+    with transaction(tenant) as s:
+        contract = find(s, SpendContract, tenant, contract_id)
+        token = issue_contract_token(contract)
+        result = {**record(contract), "token": token,
+                  "notice": "Contract token is displayed once. Store it only in the executing server."}
+        audit(s, tenant, subject, "spend_contract.created", contract.id)
+        return result
+
+
+@app.post("/api/v1/organisations/{tenant}/spend-contracts/{contract_id}/rotate-token")
+def rotate_contract_token(tenant: str, contract_id: str, subject=Depends(identity)):
+    authorize(tenant, subject, True)
+    with transaction(tenant) as s:
+        contract = find(s, SpendContract, tenant, contract_id)
+        if contract.state != "active" or contract.expires_at <= datetime.now(timezone.utc):
+            raise HTTPException(409, "contract_not_active")
+        contract.token_version += 1
+        s.flush()
+        token = issue_contract_token(contract)
+        audit(s, tenant, subject, "spend_contract.token_rotated", contract.id)
+        return {"id": contract.id, "token": token, "token_version": contract.token_version}
+
+
+@app.post("/api/v1/organisations/{tenant}/spend-contracts/{contract_id}/close")
+def close_contract(tenant: str, contract_id: str, subject=Depends(identity)):
+    authorize(tenant, subject, True)
+    close_spend_contract(tenant, contract_id)
+    with transaction(tenant) as s:
+        audit(s, tenant, subject, "spend_contract.closed", contract_id)
+    return contract_receipt(tenant, contract_id, subject)
+
+
+@app.post("/api/v1/organisations/{tenant}/spend-contracts/{contract_id}/revoke")
+def revoke_contract(tenant: str, contract_id: str, subject=Depends(identity)):
+    authorize(tenant, subject, True)
+    with transaction(tenant) as s:
+        contract = find(s, SpendContract, tenant, contract_id)
+        if contract.closed_at:
+            return {"id": contract.id, "state": contract.state, "closed": True}
+        contract.state = "revoked"
+        contract.token_version += 1
+        outstanding = contract.outstanding_cost or contract.outstanding_tokens
+        audit(s, tenant, subject, "spend_contract.revoked", contract.id)
+    if not outstanding:
+        close_spend_contract(tenant, contract_id, "revoked")
+    return {"id": contract_id, "state": "revoked", "outstanding_retained": bool(outstanding)}
+
+
+@app.get("/api/v1/organisations/{tenant}/spend-contracts/{contract_id}")
+def contract_receipt(tenant: str, contract_id: str, subject=Depends(identity)):
+    authorize(tenant, subject)
+    with transaction(tenant) as s:
+        contract = find(s, SpendContract, tenant, contract_id)
+        allocations = list(s.scalars(select(ContractAllocation).where(
+            ContractAllocation.tenant_id == tenant, ContractAllocation.contract_id == contract_id)
+            .order_by(ContractAllocation.created_at)))
+        reservations = list(s.scalars(select(ContractReservation).where(
+            ContractReservation.tenant_id == tenant, ContractReservation.contract_id == contract_id)))
+        ledger = list(s.scalars(select(ContractLedger).where(
+            ContractLedger.tenant_id == tenant, ContractLedger.contract_id == contract_id)
+            .order_by(ContractLedger.created_at)))
+        return {"contract": record(contract),
+                "remaining_cost_microusd": contract.max_cost - contract.spent_cost - contract.outstanding_cost,
+                "remaining_tokens": contract.max_tokens - contract.spent_tokens - contract.outstanding_tokens,
+                "remaining_steps": contract.max_steps - contract.steps_started,
+                "allocations": [record(row) for row in allocations],
+                "reservations": [record(row) for row in reservations],
+                "ledger": [record(row) for row in ledger]}
 
 
 @app.post("/api/v1/organisations/{tenant}/roles", status_code=201)
@@ -395,8 +490,11 @@ def request_detail(tenant: str, request_id: str, subject=Depends(identity)):
     authorize(tenant, subject)
     with transaction(tenant) as s:
         request = find(s, Request, tenant, request_id)
+        allocation = s.scalar(select(ContractAllocation).where(ContractAllocation.tenant_id == tenant,
+                                                               ContractAllocation.request_id == request_id))
         return {"request": record(request), "provider_mode": "mock", "price_version": "mock-v1",
                 "content_retained": False,
+                "contract_allocation": record(allocation) if allocation else None,
                 "reservations": [record(row) for row in s.scalars(select(Reservation).where(
                     Reservation.tenant_id == tenant, Reservation.request_id == request_id))],
                 "ledger": [record(row) for row in s.scalars(select(Ledger).where(

@@ -6,10 +6,11 @@ from cryptography.fernet import Fernet
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
-    product_name: str = "Quilblyx"
+    product_name: str = "Quiblyx"
     database_url: str = "postgresql+psycopg://platform:local-only@localhost:5432/platform"
     redis_url: str = "redis://localhost:6379/0"
     secret_key: str
+    contract_signing_key: str = ""
     dev_identity: bool = False
     dev_login_token: str = ""
     oidc_issuer: str = ""

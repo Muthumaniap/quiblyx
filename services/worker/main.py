@@ -27,10 +27,10 @@ def drain():
                     continue
                 # Development sink only. No recipient from an untrusted event payload.
                 message = EmailMessage()
-                message["From"] = "platform@localhost"
+                message["From"] = "notifications@quiblyx.local"
                 message["To"] = "local-admin@localhost"
                 message["Subject"] = f"[{settings().product_name} MOCK] Budget at {event.payload['threshold']}% committed"
-                message["Message-ID"] = f"<{event.id}@platform.local>"
+                message["Message-ID"] = f"<{event.id}@quiblyx.local>"
                 message.set_content(f"Organisation {tenant}: request accounting event {event.id}. "
                                     "View details in your authenticated console.")
                 with smtplib.SMTP(settings().smtp_host, settings().smtp_port, timeout=5) as smtp:

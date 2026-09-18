@@ -121,6 +121,8 @@ class Request(Record):
     response: Mapped[dict | None] = mapped_column(JSON)
     model: Mapped[str] = mapped_column(String(100), default="mock-text-v1")
     period: Mapped[str] = mapped_column(String(7), default=lambda: now().strftime("%Y-%m"))
+    contract_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    contract_step: Mapped[str | None] = mapped_column(String(120))
     __table_args__ = (UniqueConstraint("tenant_id", "key_id", "idempotency_key"),)
 
 
@@ -155,3 +157,59 @@ class Audit(Record):
     actor: Mapped[str] = mapped_column(String(255))
     action: Mapped[str] = mapped_column(String(80))
     target: Mapped[str] = mapped_column(String(36))
+
+
+class SpendContract(Record):
+    __tablename__ = "spend_contracts"
+    name: Mapped[str] = mapped_column(String(120))
+    purpose: Mapped[str] = mapped_column(String(500))
+    application_id: Mapped[str] = mapped_column(String(36))
+    key_id: Mapped[str] = mapped_column(String(36))
+    state: Mapped[str] = mapped_column(String(20), default="active")
+    max_cost: Mapped[int] = mapped_column(BigInteger)
+    spent_cost: Mapped[int] = mapped_column(BigInteger, default=0)
+    outstanding_cost: Mapped[int] = mapped_column(BigInteger, default=0)
+    max_tokens: Mapped[int] = mapped_column(BigInteger)
+    spent_tokens: Mapped[int] = mapped_column(BigInteger, default=0)
+    outstanding_tokens: Mapped[int] = mapped_column(BigInteger, default=0)
+    max_steps: Mapped[int] = mapped_column(Integer)
+    steps_started: Mapped[int] = mapped_column(Integer, default=0)
+    steps_completed: Mapped[int] = mapped_column(Integer, default=0)
+    allowed_models: Mapped[list] = mapped_column(JSON)
+    allowed_tools: Mapped[list] = mapped_column(JSON)
+    data_region: Mapped[str] = mapped_column(String(40), default="local")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    token_version: Mapped[int] = mapped_column(Integer, default=1)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (CheckConstraint("max_cost > 0 AND max_tokens > 0 AND max_steps > 0"),
+                      CheckConstraint("spent_cost >= 0 AND outstanding_cost >= 0"),
+                      CheckConstraint("spent_tokens >= 0 AND outstanding_tokens >= 0"))
+
+
+class ContractReservation(Record):
+    __tablename__ = "contract_reservations"
+    contract_id: Mapped[str] = mapped_column(String(36), index=True)
+    budget_id: Mapped[str] = mapped_column(String(36))
+    amount: Mapped[int] = mapped_column(BigInteger)
+    settled: Mapped[bool] = mapped_column(default=False)
+    __table_args__ = (UniqueConstraint("contract_id", "budget_id"),)
+
+
+class ContractAllocation(Record):
+    __tablename__ = "contract_allocations"
+    contract_id: Mapped[str] = mapped_column(String(36), index=True)
+    request_id: Mapped[str] = mapped_column(String(36), unique=True)
+    cost_bound: Mapped[int] = mapped_column(BigInteger)
+    token_bound: Mapped[int] = mapped_column(BigInteger)
+    actual_cost: Mapped[int | None] = mapped_column(BigInteger)
+    actual_tokens: Mapped[int | None] = mapped_column(BigInteger)
+    state: Mapped[str] = mapped_column(String(20), default="reserved")
+
+
+class ContractLedger(Record):
+    __tablename__ = "contract_ledger_entries"
+    contract_id: Mapped[str] = mapped_column(String(36), index=True)
+    budget_id: Mapped[str] = mapped_column(String(36))
+    amount: Mapped[int] = mapped_column(BigInteger)
+    event: Mapped[str] = mapped_column(String(40))
+    __table_args__ = (UniqueConstraint("contract_id", "budget_id", "event"),)

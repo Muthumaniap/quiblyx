@@ -1,6 +1,7 @@
 import hashlib
 import secrets
 import jwt
+from datetime import datetime, timezone
 from cryptography.fernet import Fernet
 from fastapi import Header, HTTPException
 from sqlalchemy import select
@@ -20,6 +21,29 @@ def encrypt(secret):
 def issue_secret():
     secret = "vk_" + secrets.token_urlsafe(32)
     return secret, digest(secret)
+
+
+def issue_contract_token(contract):
+    now = datetime.now(timezone.utc)
+    claims = {"iss": "quiblyx-contract", "aud": "quiblyx-gateway", "iat": now,
+              "exp": contract.expires_at, "sub": contract.id, "tenant_id": contract.tenant_id,
+              "application_id": contract.application_id, "key_id": contract.key_id,
+              "version": contract.token_version, "scope": "spend:allocate"}
+    cfg = settings()
+    signing_key = cfg.contract_signing_key or hashlib.sha256(("quiblyx-contract:" + cfg.secret_key).encode()).hexdigest()
+    return jwt.encode(claims, signing_key, algorithm="HS256")
+
+
+def verify_contract_token(token):
+    try:
+        cfg = settings()
+        signing_key = cfg.contract_signing_key or hashlib.sha256(("quiblyx-contract:" + cfg.secret_key).encode()).hexdigest()
+        return jwt.decode(token, signing_key, algorithms=["HS256"],
+                          audience="quiblyx-gateway", issuer="quiblyx-contract",
+                          options={"require": ["exp", "iat", "sub", "tenant_id", "application_id",
+                                               "key_id", "version", "scope"]})
+    except jwt.PyJWTError:
+        raise HTTPException(401, "invalid_spend_contract") from None
 
 
 def identity(authorization: str = Header(default="")):

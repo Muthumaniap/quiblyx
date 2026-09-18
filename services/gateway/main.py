@@ -10,8 +10,8 @@ from packages.contracts.chat import Chat
 from packages.domain.config import settings
 from packages.domain.db import transaction
 from packages.domain.models import Key, ServiceAccount
-from packages.domain.security import digest
-from packages.domain.accounting import admit, settle, transition
+from packages.domain.security import digest, verify_contract_token
+from packages.domain.accounting import admit, settle, transition, admit_contract
 from packages.providers import mock
 from packages.observability.http import configure
 
@@ -57,13 +57,25 @@ def models(authorization: str = Header(default="")):
 
 @app.post("/v1/chat/completions")
 async def chat(body: Chat, authorization: str = Header(default=""),
-               idempotency_key: str = Header(default="", max_length=128)):
+               idempotency_key: str = Header(default="", max_length=128),
+               x_spend_contract: str = Header(default="", max_length=4096),
+               x_contract_step: str = Header(default="model-call", max_length=120)):
     admitted_at = time.perf_counter()
+    x_spend_contract = x_spend_contract if isinstance(x_spend_contract, str) else ""
+    x_contract_step = x_contract_step if isinstance(x_contract_step, str) else "model-call"
     tenant, key_id, application_id = await asyncio.to_thread(authenticate, authorization)
     payload = body.model_dump()
-    rid, replay = await asyncio.to_thread(admit, tenant, key_id, application_id,
-                         idempotency_key or str(uuid.uuid4()), payload, mock.bound(body),
-                         mock.input_units(body) + body.max_tokens)
+    idem = idempotency_key or str(uuid.uuid4())
+    contract = None
+    if x_spend_contract:
+        claims = verify_contract_token(x_spend_contract)
+        if (claims["tenant_id"], claims["key_id"], claims["application_id"]) != (tenant, key_id, application_id):
+            raise HTTPException(403, "contract_principal_mismatch")
+        rid, replay, contract = await asyncio.to_thread(admit_contract, claims, idem, payload,
+            mock.bound(body), mock.input_units(body) + body.max_tokens, body.model, x_contract_step)
+    else:
+        rid, replay = await asyncio.to_thread(admit, tenant, key_id, application_id, idem, payload,
+            mock.bound(body), mock.input_units(body) + body.max_tokens)
     if replay:
         return replay
     try:
@@ -90,7 +102,10 @@ async def chat(body: Chat, authorization: str = Header(default=""),
                              "finish_reason": "stop"}],
                 "usage": {"prompt_tokens": units, "completion_tokens": len(content),
                           "total_tokens": units + len(content)},
-                "platform": {"provider": "mock", "price_version": "mock-v1", "cost_microusd": units + len(content)*2}}
+                "platform": {"provider": "mock", "price_version": "mock-v1",
+                             "cost_microusd": units + len(content)*2,
+                             "spend_contract_id": contract if contract else None,
+                             "contract_step": x_contract_step if contract else None}}
 
     async def execute(stream):
         content = ""
@@ -117,7 +132,8 @@ async def chat(body: Chat, authorization: str = Header(default=""),
     if body.stream:
         return StreamingResponse(execute(True), media_type="text/event-stream",
                                  headers={"X-Request-ID": rid, "Cache-Control": "no-store",
-                                          "X-Gateway-Admission-Ms": f"{admission_ms:.3f}"})
+                                          "X-Gateway-Admission-Ms": f"{admission_ms:.3f}",
+                                          "X-Spend-Contract-ID": contract if contract else ""})
     try:
         async for response in execute(False):
             return response

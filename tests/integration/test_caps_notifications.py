@@ -45,4 +45,4 @@ def test_threshold_deduplication_and_worker_replay(monkeypatch):
     monkeypatch.setattr("services.worker.main.smtplib.SMTP", Sink)
     drain()
     drain()
-    assert sent.count(f"<{event_id}@platform.local>") == 1
+    assert sent.count(f"<{event_id}@quiblyx.local>") == 1
