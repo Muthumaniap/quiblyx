@@ -13,4 +13,4 @@ test-results/
 .hypothesis/
 pytest-cache-files-*/
 logo*/
-ignore
+ignore*/  
