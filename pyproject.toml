@@ -1,0 +1,25 @@
+[project]
+name = "llm-management-platform"
+version = "0.1.0"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "fastapi==0.141.1",
+  "uvicorn[standard]==0.35.0",
+  "sqlalchemy==2.0.43",
+  "psycopg[binary]==3.2.9",
+  "alembic==1.16.5",
+  "redis==5.2.1",
+  "celery[redis]==5.5.3",
+  "cryptography==50.0.1",
+  "httpx==0.28.1",
+  "pydantic-settings==2.10.1",
+  "pyjwt[crypto]==2.14.0",
+  "prometheus-client==0.22.1",
+]
+[dependency-groups]
+dev = ["pytest==9.1.1", "hypothesis==6.138.15", "ruff==0.12.12"]
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+[tool.ruff]
+line-length = 110

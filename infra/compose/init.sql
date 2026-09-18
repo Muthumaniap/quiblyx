@@ -1,0 +1,3 @@
+CREATE ROLE platform LOGIN PASSWORD 'local-only' NOSUPERUSER NOBYPASSRLS;
+ALTER DATABASE platform OWNER TO platform;
+GRANT ALL ON SCHEMA public TO platform;

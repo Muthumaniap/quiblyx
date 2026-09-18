@@ -1,0 +1,23 @@
+/* Quilblyx: blue Q mark, deep navy navigation, quiet neutral work surfaces. */
+:root{--ink:#12234b;--muted:#64718a;--line:#dfe5ef;--green:#185cf4}
+body{background:#f5f7fc}
+aside{background:#0b1635;color:#d8e3fc}
+.brand{display:flex;align-items:center;gap:10px;min-height:44px;margin-bottom:44px}
+.brand img{width:42px;height:42px;flex:none;filter:drop-shadow(0 3px 10px #1554f52b)}
+.brand span{font-family:"Arial Rounded MT Bold","Trebuchet MS",Arial,sans-serif;font-size:27px;letter-spacing:-1.4px;font-weight:800;color:#fff;line-height:1.1}
+.eyebrow{color:#667ca6}
+.nav{color:#b6c4e0}
+.nav.active{background:#1a3060;color:#fff;box-shadow:inset 3px 0 #4188ff}
+.nav:not(:disabled):hover{background:#14274f;color:#fff}
+.aside-foot small{color:#93a6cc}
+.dot{background:#65a4ff}
+.badge{background:#eaf0ff;border-color:#d4e0ff;color:#244a9b}
+input,select{border-color:#cbd5e6}
+input:focus,select:focus,button:focus-visible{outline-color:#3577ff}
+button:not(.nav):not(:disabled):hover{background:#1249cb}
+th{background:#f3f6fc}
+pre{background:#101d3b;color:#dce7ff}
+footer{color:#70809c}
+.notice{background:#eaf1ff;color:#214b98}
+@media(max-width:1000px){.brand{gap:7px}.brand img{width:34px;height:34px}.brand span{font-size:23px}}
+@media(max-width:600px){.brand{display:flex;margin-bottom:20px}.brand img{width:40px;height:40px}.brand span{font-size:27px}}

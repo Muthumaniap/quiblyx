@@ -1,0 +1,1 @@
+Provider contract fixtures will be qualified here before a real integration is advertised. Current executable mock contract checks are in tests/unit/test_mock.py and streaming/accounting checks in tests/integration/test_flow.py.

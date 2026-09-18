@@ -1,0 +1,22 @@
+{
+  "scenario": "simultaneous burst, not sustained RPS",
+  "requests": 500,
+  "completed_streams": 500,
+  "elapsed_seconds": 35.965,
+  "observed_completions_per_second": 13.9,
+  "admission_p95_ms": 16019.879,
+  "end_to_end_median_ms": 31844.17,
+  "status_counts": {
+    "200": 500
+  },
+  "usage": {
+    "period": "2026-09",
+    "currency": "USD",
+    "provider_mode": "mock",
+    "spent_microusd": 34500,
+    "reserved_microusd": 0,
+    "hard_limit_microusd": 100000000
+  },
+  "platform": "Windows-11-10.0.26100-SP0",
+  "logical_cpus": 8
+}

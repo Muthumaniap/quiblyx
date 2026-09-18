@@ -1,0 +1,65 @@
+name: llm-platform
+x-backend: &backend
+  build: .
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+psycopg://platform:local-only@postgres:5432/platform
+    REDIS_URL: redis://redis:6379/0
+    SMTP_HOST: mailpit
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+    redis:
+      condition: service_healthy
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: local-bootstrap-only
+      POSTGRES_DB: platform
+    ports: ["127.0.0.1:5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/compose/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d platform"]
+      interval: 3s
+      retries: 20
+  redis:
+    image: redis:7.4.5-alpine
+    command: redis-server --appendonly yes --appendfsync always
+    ports: ["127.0.0.1:6379:6379"]
+    volumes: ["redisdata:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      retries: 20
+  mailpit:
+    image: axllent/mailpit:v1.27.8
+    ports: ["127.0.0.1:8025:8025", "127.0.0.1:1025:1025"]
+  migrate:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://platform:local-only@postgres:5432/platform
+    command: alembic upgrade head
+    depends_on:
+      postgres:
+        condition: service_healthy
+  control:
+    <<: *backend
+    ports: ["127.0.0.1:8000:8000"]
+  gateway:
+    <<: *backend
+    command: uvicorn services.gateway.main:app --host 0.0.0.0 --port 8001 --timeout-graceful-shutdown 30
+    ports: ["127.0.0.1:8001:8001"]
+  worker:
+    <<: *backend
+    command: celery -A services.worker.main worker --beat --loglevel=INFO
+  web:
+    build: ./apps/web
+    ports: ["127.0.0.1:3000:3000"]
+volumes:
+  pgdata:
+  redisdata:
